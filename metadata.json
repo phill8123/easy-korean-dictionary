@@ -1,0 +1,7 @@
+{
+  "name": "Easy Korean - Smart Dictionary",
+  "description": "An AI-powered Korean dictionary designed for beginners. Features simplified definitions, contextual examples, and AI-generated pronunciation.",
+  "requestFramePermissions": [
+    "microphone"
+  ]
+}
