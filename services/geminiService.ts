@@ -117,7 +117,7 @@ export const lookupWord = async (query: string, targetLanguage: string = "Englis
     `;
 
     const textPromise = ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-1.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -198,7 +198,7 @@ export const getTTSAudio = async (text: string): Promise<AudioBuffer> => {
     // Attempt 1: Try with specific voice config
     // Note: We use "AUDIO" string directly to avoid enum import issues in some bundlers
     const response = await ai.models.generateContent({
-      model: "gemini-2.0-flash-exp",
+      model: "gemini-1.5-flash",
       contents: { parts: [{ text: text }] },
       config: {
         responseModalities: ["AUDIO" as any],
@@ -216,7 +216,7 @@ export const getTTSAudio = async (text: string): Promise<AudioBuffer> => {
     if (!base64Audio) {
       console.warn("First TTS attempt failed (no audio), retrying with default voice...");
       const retryResponse = await ai.models.generateContent({
-        model: "gemini-2.0-flash-exp",
+        model: "gemini-1.5-flash",
         contents: { parts: [{ text: text }] },
         config: {
           responseModalities: ["AUDIO" as any],
