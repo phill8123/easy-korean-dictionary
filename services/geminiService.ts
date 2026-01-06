@@ -99,45 +99,74 @@ export const lookupWord = async (query: string, targetLanguage: string = "Englis
 
   try {
     const ai = getClient();
-    // Simplified prompt for speed
-    const prompt = `
-      Input: "${query}"
-      Target Language: ${targetLanguage}
-      
-      Task: Create a Korean dictionary entry JSON.
-      
-      If Input is NOT Korean: Translate to common Korean word first.
-      
-      Rules:
-      1. 'word' field: Korean word/phrase.
-      2. Explanations/Definitions/Translations: In ${targetLanguage}.
-      3. 'romanization': Latin chars only.
-      
-      Return valid JSON matching schema.
-    `;
 
-    const textPromise = ai.models.generateContent({
-      model: "gemini-1.5-flash-001",
-      contents: prompt,
-      config: {
-        responseMimeType: "application/json",
-        responseSchema: dictionarySchema,
-        // thinkingConfig removed as it is not needed/supported for this model in this context
-        systemInstruction: `You are a Korean tutor. Return JSON only. Explanations in ${targetLanguage}.`,
-      },
-    });
+    // Model strategy: Try efficient models first, then fall back to older/stable ones
+    // We strictly use the "001" or "002" versions? No, aliases are usually safer for updates, but fixed versions solve "alias not found".
+    // Let's mix: 1.5-flash (alias), 1.5-pro (alias), gemini-pro (legacy 1.0)
+    const candidates = ["gemini-1.5-flash", "gemini-1.5-flash-001", "gemini-1.5-pro", "gemini-1.0-pro"];
 
-    const textResponse = await textPromise;
-    if (!textResponse.text) throw new Error("No response from AI");
+    let lastError: any = null;
 
-    const entry = JSON.parse(textResponse.text) as DictionaryEntry;
+    for (const model of candidates) {
+      console.log(`Attempting search with model: ${model}`);
+      try {
+        const prompt = `
+          Input: "${query}"
+          Target Language: ${targetLanguage}
+          
+          Task: Create a Korean dictionary entry JSON.
+          
+          If Input is NOT Korean: Translate to common Korean word first.
+          
+          Rules:
+          1. 'word' field: Korean word/phrase.
+          2. Explanations/Definitions/Translations: In ${targetLanguage}.
+          3. 'romanization': Latin chars only.
+          
+          Return valid JSON matching schema.
+        `;
 
-    try {
-      localStorage.setItem(cacheKey, JSON.stringify(entry));
-    } catch (e) {
-      console.warn("Cache write failed (likely quota exceeded)", e);
+        const textPromise = ai.models.generateContent({
+          model: model,
+          contents: prompt,
+          config: {
+            responseMimeType: "application/json",
+            responseSchema: dictionarySchema,
+            systemInstruction: `You are a Korean tutor. Return JSON only. Explanations in ${targetLanguage}.`,
+          },
+        });
+
+        const textResponse = await textPromise;
+        if (!textResponse.text) throw new Error("No response from AI");
+
+        const entry = JSON.parse(textResponse.text) as DictionaryEntry;
+
+        try {
+          localStorage.setItem(cacheKey, JSON.stringify(entry));
+        } catch (e) {
+          console.warn("Cache write failed", e);
+        }
+
+        // If successful, return immediately
+        return entry;
+
+      } catch (error: any) {
+        console.warn(`Model ${model} failed:`, error.message);
+        lastError = error;
+
+        // If error is NOT a 404/Not Found, we usually shouldn't retry (e.g. Quota/Auth errors),
+        // BUT for "Quota", sometimes different models have different free buckets?
+        // Let's retry on 404 and 429 (Quota) just in case, but stop on 400 (Bad Request).
+        const errString = error.message || error.toString();
+
+        // If Invalid Argument (Key) -> Stop immediately, don't retry others
+        if (errString.match(/API\s?Key/i)) throw error;
+      }
     }
-    return entry;
+
+    // If loop finishes without success, throw the last error
+    if (lastError) throw lastError;
+    throw new Error("All models failed.");
 
   } catch (error: any) {
     console.error("Dictionary Lookup Error:", error);
