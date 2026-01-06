@@ -573,7 +573,7 @@ const App: React.FC = () => {
         <div className="max-w-5xl mx-auto px-4 py-8 flex flex-col sm:flex-row justify-between items-center gap-4 text-slate-500 text-sm">
           <p>© {new Date().getFullYear()} EasyKorean.</p>
           <div className="flex items-center gap-4">
-            <span className="flex items-center gap-1 hover:text-purple-700 transition-colors cursor-pointer"><Sparkles size={14} /> {ui.footer}</span>
+            <span className="flex items-center gap-1 hover:text-purple-700 transition-colors cursor-pointer"><Sparkles size={14} /> {ui.footer} (v0.3.1)</span>
           </div>
         </div>
       </footer>
