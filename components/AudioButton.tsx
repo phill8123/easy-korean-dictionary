@@ -1,7 +1,5 @@
 import React, { useState, useEffect } from 'react';
 import { Volume2, Loader2, VolumeX } from 'lucide-react';
-import { getTTSAudio } from '../services/geminiService';
-import { playBuffer } from '../services/audioUtils';
 
 interface AudioButtonProps {
   text: string;
@@ -25,11 +23,18 @@ const AudioButton: React.FC<AudioButtonProps> = ({ text, size = 24, className = 
     return () => clearTimeout(timer);
   }, [status]);
 
-  const handlePlay = async (e: React.MouseEvent) => {
+  const handlePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (status === 'loading' || status === 'playing') return;
 
-    // Basic length check to prevent TTS errors on very long text
+    // Check browser support
+    if (!('speechSynthesis' in window)) {
+      setStatus('error');
+      setErrorMessage('Audio not supported');
+      return;
+    }
+
+    // Basic length check
     if (text.length > 500) {
       setStatus('error');
       setErrorMessage('Text too long');
@@ -39,14 +44,31 @@ const AudioButton: React.FC<AudioButtonProps> = ({ text, size = 24, className = 
     try {
       setStatus('loading');
       setErrorMessage('');
-      // Fetch audio data
-      const buffer = await getTTSAudio(text);
-      
-      setStatus('playing');
-      // Play and wait for it to finish
-      await playBuffer(buffer);
-      
-      setStatus('idle');
+
+      // Cancel any ongoing speech
+      window.speechSynthesis.cancel();
+
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = 'ko-KR'; // Korean
+      utterance.rate = 0.9; // Slightly slower for clarity
+      utterance.pitch = 1.0;
+
+      utterance.onstart = () => {
+        setStatus('playing');
+      };
+
+      utterance.onend = () => {
+        setStatus('idle');
+      };
+
+      utterance.onerror = (e) => {
+        console.error("Speech Synthesis Error", e);
+        setStatus('error');
+        setErrorMessage('Playback failed');
+      };
+
+      window.speechSynthesis.speak(utterance);
+
     } catch (error) {
       console.error("Failed to play audio", error);
       setStatus('error');
@@ -64,9 +86,9 @@ const AudioButton: React.FC<AudioButtonProps> = ({ text, size = 24, className = 
       {/* Error Toast - Absolute positioned relative to container */}
       {status === 'error' && (
         <div className="absolute bottom-full mb-2 bg-rose-500 text-white text-[10px] font-bold px-2 py-1 rounded-md shadow-lg whitespace-nowrap z-50">
-            {errorMessage}
-            {/* Triangle pointer */}
-            <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-rose-500"></div>
+          {errorMessage}
+          {/* Triangle pointer */}
+          <div className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent border-t-rose-500"></div>
         </div>
       )}
 
