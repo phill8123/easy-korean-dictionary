@@ -27,14 +27,12 @@ const AudioButton: React.FC<AudioButtonProps> = ({ text, size = 24, className = 
     e.stopPropagation();
     if (status === 'loading' || status === 'playing') return;
 
-    // Check browser support
     if (!('speechSynthesis' in window)) {
       setStatus('error');
       setErrorMessage('Audio not supported');
       return;
     }
 
-    // Basic length check
     if (text.length > 500) {
       setStatus('error');
       setErrorMessage('Text too long');
@@ -45,12 +43,33 @@ const AudioButton: React.FC<AudioButtonProps> = ({ text, size = 24, className = 
       setStatus('loading');
       setErrorMessage('');
 
-      // Cancel any ongoing speech
       window.speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = 'ko-KR'; // Korean
-      utterance.rate = 0.9; // Slightly slower for clarity
+      utterance.lang = 'ko-KR';
+
+      // Intelligent Voice Selection Logic
+      const voices = window.speechSynthesis.getVoices();
+      const koreanVoices = voices.filter(v => v.lang.includes('ko') || v.lang.includes('KO'));
+
+      // Priority: Google -> Microsoft Online -> Any Korean -> Default
+      const preferredVoice = koreanVoices.find(v => v.name.includes('Google')) ||
+        koreanVoices.find(v => v.name.includes('Microsoft') && v.name.includes('Online')) ||
+        koreanVoices.find(v => v.name.includes('Microsoft')) ||
+        koreanVoices[0];
+
+      if (preferredVoice) {
+        utterance.voice = preferredVoice;
+        // Adjust rate based on voice type for naturalness
+        if (preferredVoice.name.includes('Google')) {
+          utterance.rate = 1.0; // Google voices are usually well-paced
+        } else {
+          utterance.rate = 0.9; // System voices can be fast
+        }
+      } else {
+        utterance.rate = 0.9;
+      }
+
       utterance.pitch = 1.0;
 
       utterance.onstart = () => {
