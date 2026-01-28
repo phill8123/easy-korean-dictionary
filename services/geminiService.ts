@@ -89,7 +89,8 @@ export const lookupWord = async (query: string, targetLanguage: string = "Englis
 
   const genAI = getClient();
   // Simplified candidates list to standard stable aliases
-  const candidates = ["gemini-1.5-flash", "gemini-1.5-pro", "gemini-pro"];
+  // Updated candidates to include valid models for this key
+  const candidates = ["gemini-2.5-flash", "gemini-1.5-flash", "gemini-1.5-pro"];
 
   let errorLog: string[] = [];
   let quotaError: any = null;
