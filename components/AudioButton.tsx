@@ -55,13 +55,59 @@ const AudioButton: React.FC<AudioButtonProps> = ({ text, size = 24, className = 
     };
   }, []);
 
+  // Fallback audio player for environments without SpeechSynthesis (e.g. KakaoTalk in-app browser)
+  const playFallbackAudio = (textToPlay: string) => {
+    try {
+      setStatus('loading');
+      setErrorMessage('');
+
+      const encodedText = encodeURIComponent(textToPlay);
+      // Undocumented Google Translate TTS endpoint as a fallback
+      const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodedText}&tl=ko&client=tw-ob`;
+
+      const audio = new Audio(audioUrl);
+
+      // Need to keep reference to prevent GC during playback
+      // We can reuse the utteranceRef container or just use a local variable since Audio elements are less prone to GC issues during playback than Utterances
+      // But let's attach handlers carefully.
+
+      audio.onplay = () => setStatus('playing');
+
+      audio.onended = () => {
+        setStatus('idle');
+      };
+
+      audio.onerror = (e) => {
+        console.error("Fallback Audio Error", e);
+        setStatus('error');
+        setErrorMessage('Audio not supported');
+      };
+
+      const playPromise = audio.play();
+      if (playPromise !== undefined) {
+        playPromise.catch(error => {
+          console.error("Fallback Playback Failed", error);
+          setStatus('error');
+          setErrorMessage('Audio blocked/failed');
+        });
+      }
+
+    } catch (e) {
+      console.error("Fallback Exception", e);
+      setStatus('error');
+      setErrorMessage('Audio error');
+    }
+  };
+
   const handlePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
     if (status === 'loading' || status === 'playing') return;
 
-    if (!('speechSynthesis' in window)) {
-      setStatus('error');
-      setErrorMessage('Audio not supported');
+    // Check if SpeechSynthesis is supported
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
+      // Try fallback instead of failing immediately
+      console.log("SpeechSynthesis not supported, attempting fallback audio...");
+      playFallbackAudio(text);
       return;
     }
 
@@ -133,8 +179,9 @@ const AudioButton: React.FC<AudioButtonProps> = ({ text, size = 24, className = 
         console.error("Speech Synthesis Error", e);
         // Don't show visible error for "interrupted" or "canceled" as it might just be user clicking again
         if (e.error !== 'interrupted' && e.error !== 'canceled') {
-          setStatus('error');
-          setErrorMessage('Playback failed');
+          // Attempt fallback if speech synthesis API fails unexpectedly
+          console.warn("Speech Synthesis failed, trying fallback...");
+          playFallbackAudio(text);
         } else {
           setStatus('idle');
         }
@@ -150,8 +197,8 @@ const AudioButton: React.FC<AudioButtonProps> = ({ text, size = 24, className = 
 
     } catch (error) {
       console.error("Failed to play audio", error);
-      setStatus('error');
-      setErrorMessage('Playback failed');
+      // Try fallback as last resort
+      playFallbackAudio(text);
     }
   };
 
