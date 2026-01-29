@@ -26,17 +26,33 @@ const AudioButton: React.FC<AudioButtonProps> = ({ text, size = 24, className = 
 
   // Pre-load voices on mount to ensure availability on mobile
   useEffect(() => {
+    // Safety check: SpeechSynthesis might not be available on all mobile browsers/webviews
+    if (typeof window === 'undefined' || !('speechSynthesis' in window)) return;
+
     const loadVoices = () => {
-      const voices = window.speechSynthesis.getVoices();
-      if (voices.length > 0) {
-        console.log(`AudioButton: Loaded ${voices.length} voices`);
+      try {
+        const voices = window.speechSynthesis.getVoices();
+        if (voices.length > 0) {
+          console.log(`AudioButton: Loaded ${voices.length} voices`);
+        }
+      } catch (e) {
+        console.warn("AudioButton: Failed to load voices", e);
       }
     };
 
     loadVoices();
-    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+
+    // Safely assign event listener
+    if (window.speechSynthesis && window.speechSynthesis.onvoiceschanged !== undefined) {
       window.speechSynthesis.onvoiceschanged = loadVoices;
     }
+
+    return () => {
+      // Cleanup listener if possible/needed, though simple reassignment is usually fine for this singleton
+      if (window.speechSynthesis && window.speechSynthesis.onvoiceschanged === loadVoices) {
+        window.speechSynthesis.onvoiceschanged = null;
+      }
+    };
   }, []);
 
   const handlePlay = (e: React.MouseEvent) => {
