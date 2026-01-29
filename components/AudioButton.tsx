@@ -11,6 +11,7 @@ interface AudioButtonProps {
 const AudioButton: React.FC<AudioButtonProps> = ({ text, size = 24, className = '', dark = false }) => {
   const [status, setStatus] = useState<'idle' | 'loading' | 'playing' | 'error'>('idle');
   const [errorMessage, setErrorMessage] = useState<string>('');
+  const utteranceRef = React.useRef<SpeechSynthesisUtterance | null>(null);
 
   useEffect(() => {
     let timer: ReturnType<typeof setTimeout>;
@@ -22,6 +23,21 @@ const AudioButton: React.FC<AudioButtonProps> = ({ text, size = 24, className = 
     }
     return () => clearTimeout(timer);
   }, [status]);
+
+  // Pre-load voices on mount to ensure availability on mobile
+  useEffect(() => {
+    const loadVoices = () => {
+      const voices = window.speechSynthesis.getVoices();
+      if (voices.length > 0) {
+        console.log(`AudioButton: Loaded ${voices.length} voices`);
+      }
+    };
+
+    loadVoices();
+    if (window.speechSynthesis.onvoiceschanged !== undefined) {
+      window.speechSynthesis.onvoiceschanged = loadVoices;
+    }
+  }, []);
 
   const handlePlay = (e: React.MouseEvent) => {
     e.stopPropagation();
@@ -46,27 +62,43 @@ const AudioButton: React.FC<AudioButtonProps> = ({ text, size = 24, className = 
       window.speechSynthesis.cancel();
 
       const utterance = new SpeechSynthesisUtterance(text);
+      // Store reference to prevent garbage collection before playback finishes
+      utteranceRef.current = utterance;
+
       utterance.lang = 'ko-KR';
 
       // Intelligent Voice Selection Logic
-      const voices = window.speechSynthesis.getVoices();
-      const koreanVoices = voices.filter(v => v.lang.includes('ko') || v.lang.includes('KO'));
+      let voices = window.speechSynthesis.getVoices();
 
-      // Priority: Google -> Microsoft Online -> Any Korean -> Default
+      // Retry getting voices if empty (sometimes needed on mobile)
+      if (voices.length === 0) {
+        voices = window.speechSynthesis.getVoices();
+      }
+
+      const koreanVoices = voices.filter(v => v.lang.includes('ko') || v.lang.includes('KO'));
+      console.log("Available Korean Voices:", koreanVoices.map(v => v.name));
+
+      // Priority: Google -> Microsoft Online -> Apple (iOS) -> Any Korean -> Default
       const preferredVoice = koreanVoices.find(v => v.name.includes('Google')) ||
         koreanVoices.find(v => v.name.includes('Microsoft') && v.name.includes('Online')) ||
-        koreanVoices.find(v => v.name.includes('Microsoft')) ||
+        koreanVoices.find(v => v.name.includes('Damien')) || // iOS high quality
+        koreanVoices.find(v => v.name.includes('Yuna')) ||   // iOS high quality
+        koreanVoices.find(v => v.name.includes('Apple')) ||  // Generic iOS
         koreanVoices[0];
 
       if (preferredVoice) {
+        console.log("Selected Voice:", preferredVoice.name);
         utterance.voice = preferredVoice;
         // Adjust rate based on voice type for naturalness
         if (preferredVoice.name.includes('Google')) {
-          utterance.rate = 1.0; // Google voices are usually well-paced
+          utterance.rate = 1.0;
+        } else if (preferredVoice.name.includes('Amelie') || preferredVoice.name.includes('Yuna')) {
+          utterance.rate = 0.9;
         } else {
-          utterance.rate = 0.9; // System voices can be fast
+          utterance.rate = 0.9;
         }
       } else {
+        console.log("No specific Korean voice found, using system default for ko-KR");
         utterance.rate = 0.9;
       }
 
@@ -78,15 +110,27 @@ const AudioButton: React.FC<AudioButtonProps> = ({ text, size = 24, className = 
 
       utterance.onend = () => {
         setStatus('idle');
+        utteranceRef.current = null; // Cleanup
       };
 
       utterance.onerror = (e) => {
         console.error("Speech Synthesis Error", e);
-        setStatus('error');
-        setErrorMessage('Playback failed');
+        // Don't show visible error for "interrupted" or "canceled" as it might just be user clicking again
+        if (e.error !== 'interrupted' && e.error !== 'canceled') {
+          setStatus('error');
+          setErrorMessage('Playback failed');
+        } else {
+          setStatus('idle');
+        }
+        utteranceRef.current = null;
       };
 
       window.speechSynthesis.speak(utterance);
+
+      // iOS Safari Workaround: sometimes it needs a nudge if it's "paused"
+      if (window.speechSynthesis.paused) {
+        window.speechSynthesis.resume();
+      }
 
     } catch (error) {
       console.error("Failed to play audio", error);

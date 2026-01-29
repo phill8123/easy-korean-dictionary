@@ -11,7 +11,7 @@ const AUDIO_CACHE = new Map<string, AudioBuffer>(); // In-memory cache for TTS a
 const getClient = () => {
   // FIX: Using import.meta.env for Vite instead of process.env
   // @ts-ignore
-  const apiKey = import.meta.env.VITE_API_KEY || (process as any).env.API_KEY;
+  const apiKey = import.meta.env.VITE_API_KEY;
 
   if (!apiKey) {
     console.error("API_KEY is missing. Please check your .env.local file and ensure VITE_API_KEY is set.");
